@@ -1,15 +1,20 @@
+
 from scapy.all import *
 from pbkdf2 import PBKDF2
 import hmac
 from hashlib import pbkdf2_hmac, sha1, md5
+from binascii import a2b_hex, b2a_hex
 
-cap = "/home/kali/Documents/groep2-07.cap"
+#Put the .cap file you want to analyse here
+cap = "/home/kali/Documents/groep2-13.cap"
 packet_file = rdpcap(cap)
 
-ssid = "groep2"
+ssid = "groep2 "
 password = "uncrackable"
-PMK = PBKDF2(password, ssid, 4096).read(32).hex()
 
+
+# Create the PMK using the pbkdf2 function
+PMK = pbkdf2_hmac('sha1', password.encode('ascii'), ssid.encode('ascii'), 4096, 32).hex()
 
 authenticator_macs = []
 supplicant_macs = []
@@ -29,6 +34,7 @@ while i < len(eapol):
 		del eapol[i]
 	else:
 		i += 1
+
 #Manually select 1 handshake
 handshake1 = eapol[:4]
 
@@ -47,10 +53,7 @@ for pkt in handshake1:
 	MICs.append(pkt[154:186])
 	key_datas.append(pkt[190:])
 
-Anonce = nonces[0]
-Snonce = nonces[1]
-Amac = authenticator_macs[0]
-Smac = supplicant_macs[0]
+
 
 def PRF(PMK, A, B):
 	"""
@@ -65,7 +68,7 @@ def PRF(PMK, A, B):
 	R = b''
 	#Each iteration produces 160-bit value and 512 bits are required
 	while(i <= ((nByte * 8 + 159) / 160)):
-		hmacsha1 = hmac.new(PMK.encode(), A + chr(0x00).encode() + B + chr(i).encode(), sha1)
+		hmacsha1 = hmac.new(a2b_hex(PMK), A + chr(0x00).encode() + B + chr(i).encode(), sha1)
 		R = R + hmacsha1.digest()
 		i += 1
 	return R[:nByte]
@@ -73,24 +76,39 @@ def PRF(PMK, A, B):
 
 def make_B(Anonce, Snonce, Amac, Smac):
 	B = min(Amac, Smac) + max(Amac, Smac) + min(Anonce, Snonce) + max(Anonce, Snonce)
-	return B.encode()
+	
+	return B
 
 
 def format_mac(mac):
 	new_mac = mac.replace(":", "")
 	return new_mac
 
-B = make_B(Anonce, Snonce, Amac, Smac)
 
-Amac = format_mac(Amac).encode()
-Smac = format_mac(Smac).encode()
+Anonce = a2b_hex(nonces[0])
+Snonce = a2b_hex(nonces[1])
+
+Amac = authenticator_macs[0]
+Smac = supplicant_macs[0]
+
+Amac = a2b_hex(format_mac(Amac))
+Smac = a2b_hex(format_mac(Smac))
+
+
 A = b'Pairwise key expansion'
+B = make_B(Anonce, Snonce, Amac, Smac)
 
 PTK = PRF(PMK, A, B).hex()
 
+print("PMK : ")
+print(PMK)
 
 print("PTK : ")
 print(PTK)
+
+
+
+
 
 
 
