@@ -232,13 +232,30 @@ def AESDecryption(key, encrypted_text):
     state = AddRoundKey(state, expanded_key, 0)
     return MakePlain(state)
 
-packets = rdpcap("groep2-07.cap")
-for nb in range(10):
-	pkt = packets[nb]
-	if pkt.haslayer(Raw):
-		data = pkt.load.hex()
-		key = "000102030405060708090a0b0c0d0e0f"
-		# Key gekozen als wijze van voorbeeld
-		print("===================")
-		for i in range((len(data)//32)-1):
-			print(AESDecryption(key, data[i*32:(i+1)*32]))
+packets = rdpcap("groep2-13.cap")
+
+def HexToAscii(plain):
+	output = []
+	for i in range(len(plain)//2):
+		output.append(chr(int(plain[i*2:i*2+2], 16)))
+	output = ''.join(output)
+	return output
+
+
+def Decrypt(ptk, packets):
+	for nb in range(len(packets)):
+		pkt = packets[nb]
+		if pkt.getlayer(Dot11CCMP) is not None:
+			data = pkt.getlayer(Dot11CCMP).data.hex()
+			for i in range((len(data)//32)-1):
+				print(HexToAscii(AESDecryption(ptk, data[i*32:(i+1)*32])))
+
+#ptk found by aircrack
+ptk1 = '1ddc73e7f5ce2dfea69e0b5436333d98e6884791b6fa06d4f178f778459891c63a6fc803667a492443320535fefc81855e9ec4abd0cccdd78c988b523b000000'
+#ptk found by our algorithm
+ptk2 = '461d6eaecb54c8edd2466fc5b25a9cf3b18c01679e4f9516c29f14e28c52d31b9d0ddd2a442821573938333dd9efc89a68e3a4af7cee32e6380f5850ca005eb4'
+
+
+Decrypt(ptk2[64:64 + 32], packets)
+
+
