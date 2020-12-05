@@ -1,4 +1,4 @@
-# This program decrypts .cap files encrypted with AES in counter mode
+# This script will decrypt .cap files which are encrypted with AES (in counter mode)
 
 from scapy.all import *
 
@@ -243,37 +243,56 @@ def HexToAscii(plain):
 	output = ''.join(output)
 	return output
 
+def format_mac(mac):
+	new_mac = mac.replace(":", "")
+	return new_mac
+
+def MakeIv(pkt):
+	#print(pkt.getlayer(Dot11CCMP).PN5)
+	iv = padded_hex(pkt.getlayer(Dot11CCMP).PN5, 2)[2:] + padded_hex(pkt.getlayer(Dot11CCMP).PN4, 2)[2:] + padded_hex(pkt.getlayer(Dot11CCMP).PN3, 2)[2:] + padded_hex(pkt.getlayer(Dot11CCMP).PN2, 2)[2:] + padded_hex(pkt.getlayer(Dot11CCMP).PN1, 2)[2:] + padded_hex(pkt.getlayer(Dot11CCMP).PN0, 2)[2:] 	
+	iv = padded_hex(int(iv, 16), 12)
+	return iv
+
+def MakeNonce(pkt):
+	PN = MakeIv(pkt)
+	Smac = format_mac(pkt.addr2)
+	priority = '00'
+	nonce = str(priority) + str(Smac) + str(PN[2:])      
+	return nonce
+
 def AES_CTR(plain, key, nonce, iv, one = 1):
-    print(plain)
     n = len(plain)//32
     rest = len(plain)%32
-    print(n)
     cipher = []
-    ctrblk = nonce + iv + padded_hex(one, 8)[2:]
+    flag = '01'
+    ctrblk = flag + nonce + padded_hex(one, 4)[2:]
+    
     for i in range(n):
-        temp = padded_hex(int(plain[i*32: (i+1)*32], 16) ^ int(AESEncryption(key, ctrblk), 16), 8)
+        temp = padded_hex(int(plain[i*32: (i+1)*32], 16) ^ int(AESEncryption(key, ctrblk), 16), 32)
         cipher.append(temp[2:])
         ctrblk = padded_hex(int(ctrblk, 16) + 1, 32)[2:]
     if rest != 0:
-        temp = padded_hex(int(plain[n * 32: (n + 1) * 32], 16) ^ int(AESEncryption(key, ctrblk), 16), 8)[2:2+rest]
+        temp = padded_hex(int(plain[n * 32: (n + 1) * 32], 16) ^ int(AESEncryption(key, ctrblk), 16), 32)[2:2+rest]
         cipher.append(temp)
     return cipher
+		
 
 def Decrypt(ptk, packets):
 	for nb in range(len(packets)):
 		pkt = packets[nb]
-		if pkt.getlayer(Dot11CCMP) is not None:
+		if pkt.getlayer(Dot11CCMP) is not None and pkt.getlayer(Dot11).addr1 == '08:be:ac:03:dc:2e':
 			data = pkt.getlayer(Dot11CCMP).data.hex()
-			iv = MakeIv()
-			nonce = MakeNonce()
+			iv = MakeIv(pkt)
+			nonce = MakeNonce(pkt)
 			decrypted_data = AES_CTR(data, ptk, nonce, iv)
 			decrypted_data = ''.join(decrypted_data)
 			print(HexToAscii(decrypted_data))
 
-# Put the name of your .cap file here
+# Put the .cap file you want to decrypt here
 packets = rdpcap("groep2-13.cap")
 
-# Put the PTK found by the create_PTK algorithm here
+# Put the PTK derived from the create_PTK script here
 ptk = '461d6eaecb54c8edd2466fc5b25a9cf3b18c01679e4f9516c29f14e28c52d31b9d0ddd2a442821573938333dd9efc89a68e3a4af7cee32e6380f5850ca005eb4'
 
 Decrypt(ptk[64:64 + 32], packets)
+
